@@ -6,9 +6,12 @@ interface Mouse {
   col: number;
   targetRow: number;
   targetCol: number;
-  progress: number; // 0 to 1 between current and target cell
+  progress: number;
   speed: number;
   caught: boolean;
+  escaped: boolean;
+  pathIndex: number;
+  path: { row: number; col: number }[];
 }
 
 interface Cell {
@@ -18,6 +21,10 @@ interface Cell {
 const COLS = 13;
 const ROWS = 9;
 const CELL_SIZE = 60;
+
+// Entry and exit
+const ENTRY = { row: 0, col: 0 };
+const EXIT = { row: ROWS - 1, col: COLS - 1 };
 
 const catMessages = [
   'Мяу! Поймала! 😼',
@@ -35,6 +42,18 @@ const catMessages = [
   'Охота удалась! 🎯',
   'Мяяяу! 🎉',
   'Ещё хочу! 😽',
+  'Не убежишь! 🏃',
+  'Ага, попалась! 🎪',
+  'Слишком медленная! 😏',
+];
+
+const escapeMessages = [
+  'Убежала! Пока-пока! 👋',
+  'Не догонишь! 😜',
+  'Свобода! 🎉',
+  'Ха-ха-ха! 😂',
+  'Котик — лох! 🤪',
+  'Не поймал! 😝',
 ];
 
 const moods = ['😿', '🙀', '😾', '😺', '😸', '😻', '😽'];
@@ -58,7 +77,6 @@ function generateMaze(cols: number, rows: number): Cell[][] {
     { dr: 0, dc: -1, wall: 'left' as const, opposite: 'right' as const },
   ];
 
-  // Iterative DFS
   const stack: { r: number; c: number }[] = [{ r: 0, c: 0 }];
   visited[0][0] = true;
 
@@ -66,7 +84,6 @@ function generateMaze(cols: number, rows: number): Cell[][] {
     const current = stack[stack.length - 1];
     const { r, c } = current;
 
-    // Find unvisited neighbors
     const shuffled = [...directions].sort(() => Math.random() - 0.5);
     const unvisitedNeighbors = shuffled.filter(dir => {
       const nr = r + dir.dr;
@@ -88,17 +105,84 @@ function generateMaze(cols: number, rows: number): Cell[][] {
     }
   }
 
+  // Open entry (left wall of first cell)
+  grid[ENTRY.row][ENTRY.col].walls.left = false;
+  // Open exit (right wall of last cell)
+  grid[EXIT.row][EXIT.col].walls.right = false;
+
   return grid;
 }
 
-// Get available directions from a cell
-function getAvailableDirections(grid: Cell[][], row: number, col: number) {
-  const dirs: { dr: number; dc: number }[] = [];
-  if (!grid[row][col].walls.top && row > 0) dirs.push({ dr: -1, dc: 0 });
-  if (!grid[row][col].walls.right && col < COLS - 1) dirs.push({ dr: 0, dc: 1 });
-  if (!grid[row][col].walls.bottom && row < ROWS - 1) dirs.push({ dr: 1, dc: 0 });
-  if (!grid[row][col].walls.left && col > 0) dirs.push({ dr: 0, dc: -1 });
-  return dirs;
+// BFS to find shortest path from start to exit
+function findPathToExit(grid: Cell[][], startRow: number, startCol: number): { row: number; col: number }[] {
+  const visited: boolean[][] = Array.from({ length: ROWS }, () =>
+    Array(COLS).fill(false)
+  );
+  const parent: ({ row: number; col: number } | null)[][] = Array.from({ length: ROWS }, () =>
+    Array(COLS).fill(null)
+  );
+
+  const queue: { row: number; col: number }[] = [{ row: startRow, col: startCol }];
+  visited[startRow][startCol] = true;
+
+  const directions = [
+    { dr: -1, dc: 0, wall: 'top' as const },
+    { dr: 0, dc: 1, wall: 'right' as const },
+    { dr: 1, dc: 0, wall: 'bottom' as const },
+    { dr: 0, dc: -1, wall: 'left' as const },
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+
+    if (current.row === EXIT.row && current.col === EXIT.col) {
+      // Reconstruct path
+      const path: { row: number; col: number }[] = [];
+      let node: { row: number; col: number } | null = current;
+      while (node) {
+        path.unshift(node);
+        node = parent[node.row][node.col];
+      }
+      return path;
+    }
+
+    for (const dir of directions) {
+      const nr = current.row + dir.dr;
+      const nc = current.col + dir.dc;
+
+      if (
+        nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS &&
+        !visited[nr][nc] &&
+        !grid[current.row][current.col].walls[dir.wall]
+      ) {
+        visited[nr][nc] = true;
+        parent[nr][nc] = current;
+        queue.push({ row: nr, col: nc });
+      }
+    }
+  }
+
+  // Fallback: no path found
+  return [{ row: startRow, col: startCol }];
+}
+
+let nextMouseId = 0;
+
+function createMouse(maze: Cell[][]): Mouse {
+  const path = findPathToExit(maze, ENTRY.row, ENTRY.col);
+  return {
+    id: nextMouseId++,
+    row: ENTRY.row,
+    col: ENTRY.col,
+    targetRow: path.length > 1 ? path[1].row : ENTRY.row,
+    targetCol: path.length > 1 ? path[1].col : ENTRY.col,
+    progress: 0,
+    speed: 0.015 + Math.random() * 0.015,
+    caught: false,
+    escaped: false,
+    pathIndex: 0,
+    path,
+  };
 }
 
 export default function App() {
@@ -106,6 +190,7 @@ export default function App() {
   const [catMood, setCatMood] = useState('😺');
   const [mice, setMice] = useState<Mouse[]>([]);
   const [caughtCount, setCaughtCount] = useState(0);
+  const [escapedCount, setEscapedCount] = useState(0);
   const [speechBubble, setSpeechBubble] = useState<string | null>(null);
   const [maze] = useState(() => generateMaze(COLS, ROWS));
   const miceRef = useRef<Mouse[]>([]);
@@ -119,60 +204,44 @@ export default function App() {
     }))
   );
 
-  // Initialize mice at random positions in the maze
+  // Initialize mice
   useEffect(() => {
-    const initialMice: Mouse[] = Array.from({ length: 5 }, (_, i) => {
-      const row = Math.floor(Math.random() * ROWS);
-      const col = Math.floor(Math.random() * COLS);
-      return {
-        id: i,
-        row,
-        col,
-        targetRow: row,
-        targetCol: col,
-        progress: 0,
-        speed: 0.02 + Math.random() * 0.02,
-        caught: false,
-      };
-    });
+    const initialMice: Mouse[] = Array.from({ length: 4 }, () => createMouse(maze));
     setMice(initialMice);
     miceRef.current = initialMice;
-  }, []);
+  }, [maze]);
 
   // Animate mice movement through maze
   useEffect(() => {
     const interval = setInterval(() => {
       setMice(prevMice => {
         const updated = prevMice.map(mouse => {
-          if (mouse.caught) return mouse;
+          if (mouse.caught || mouse.escaped) return mouse;
 
-          // If reached target, pick new direction
+          // If reached target cell, advance to next in path
           if (mouse.progress >= 1) {
-            const newRow = mouse.targetRow;
-            const newCol = mouse.targetCol;
-            const available = getAvailableDirections(maze, newRow, newCol);
+            const nextIndex = mouse.pathIndex + 1;
 
-            if (available.length === 0) return mouse;
+            // Reached exit?
+            if (
+              mouse.row === EXIT.row && mouse.col === EXIT.col
+            ) {
+              return { ...mouse, escaped: true, progress: 1 };
+            }
 
-            // Prefer not going back
-            const prevDir = {
-              dr: mouse.targetRow - mouse.row,
-              dc: mouse.targetCol - mouse.col,
-            };
-            const opposite = available.filter(
-              d => !(d.dr === -prevDir.dr && d.dc === -prevDir.dc)
-            );
-            const choices = opposite.length > 0 ? opposite : available;
+            if (nextIndex >= mouse.path.length) {
+              return { ...mouse, escaped: true, progress: 1 };
+            }
 
-            const choice = choices[Math.floor(Math.random() * choices.length)];
-
+            const nextCell = mouse.path[nextIndex];
             return {
               ...mouse,
-              row: newRow,
-              col: newCol,
-              targetRow: newRow + choice.dr,
-              targetCol: newCol + choice.dc,
+              row: mouse.targetRow,
+              col: mouse.targetCol,
+              targetRow: nextCell.row,
+              targetCol: nextCell.col,
               progress: 0,
+              pathIndex: nextIndex,
             };
           }
 
@@ -181,6 +250,19 @@ export default function App() {
             progress: Math.min(1, mouse.progress + mouse.speed),
           };
         });
+
+        // Handle escaped mice — remove them and spawn new ones
+        const escaped = updated.filter(m => m.escaped);
+        if (escaped.length > 0) {
+          setEscapedCount(prev => prev + escaped.length);
+          // Spawn new mice through entry
+          const newMice = escaped.map(() => createMouse(maze));
+          const remaining = updated.filter(m => !m.escaped);
+          const result = [...remaining, ...newMice];
+          miceRef.current = result;
+          return result;
+        }
+
         miceRef.current = updated;
         return updated;
       });
@@ -213,22 +295,12 @@ export default function App() {
     setSpeechBubble(randomMessage);
     setTimeout(() => setSpeechBubble(null), 2500);
 
-    // Respawn mouse after 3 seconds at random position
+    // Respawn mouse after 3 seconds at entry
     setTimeout(() => {
       setMice(prevMice =>
         prevMice.map(mouse => {
           if (mouse.id === id) {
-            const row = Math.floor(Math.random() * ROWS);
-            const col = Math.floor(Math.random() * COLS);
-            return {
-              ...mouse,
-              caught: false,
-              row,
-              col,
-              targetRow: row,
-              targetCol: col,
-              progress: 0,
-            };
+            return createMouse(maze);
           }
           return mouse;
         })
@@ -236,21 +308,31 @@ export default function App() {
     }, 3000);
   };
 
-  // Calculate mouse pixel position (interpolated between cells)
+  // Handle escape events
+  useEffect(() => {
+    if (escapedCount > 0) {
+      const msg = escapeMessages[Math.floor(Math.random() * escapeMessages.length)];
+      setSpeechBubble(msg);
+      setCatMood('😿');
+      setTimeout(() => setSpeechBubble(null), 2500);
+    }
+  }, [escapedCount]);
+
+  // Calculate mouse pixel position
   const getMousePosition = (mouse: Mouse) => {
     const x = (mouse.col + (mouse.targetCol - mouse.col) * mouse.progress) * CELL_SIZE + CELL_SIZE / 2;
     const y = (mouse.row + (mouse.targetRow - mouse.row) * mouse.progress) * CELL_SIZE + CELL_SIZE / 2;
     return { x, y };
   };
 
-  // Calculate rotation based on movement direction
+  // Calculate rotation
   const getMouseRotation = (mouse: Mouse) => {
     const dr = mouse.targetRow - mouse.row;
     const dc = mouse.targetCol - mouse.col;
-    if (dr === -1) return 0; // up
-    if (dc === 1) return 90; // right
-    if (dr === 1) return 180; // down
-    if (dc === -1) return 270; // left
+    if (dr === -1) return 0;
+    if (dc === 1) return 90;
+    if (dr === 1) return 180;
+    if (dc === -1) return 270;
     return 0;
   };
 
@@ -277,16 +359,42 @@ export default function App() {
       </div>
 
       {/* Title */}
-      <h1 className="text-4xl font-bold text-pink-700 mb-3 relative z-10">Мяу-мир 🐱</h1>
+      <h1 className="text-4xl font-bold text-pink-700 mb-2 relative z-10">Мяу-мир 🐱</h1>
       <p className="text-orange-600 mb-4 text-lg relative z-10">
-        Лови мышей в лабиринте!
+        Лови мышей в лабиринте! Они бегут к выходу 🚪
       </p>
 
       {/* Maze container */}
       <div
-        className="relative bg-white/40 backdrop-blur-sm rounded-2xl border-2 border-pink-200 shadow-xl overflow-hidden"
+        className="relative bg-white/40 backdrop-blur-sm rounded-2xl border-2 border-pink-200 shadow-xl overflow-visible"
         style={{ width: mazeWidth, height: mazeHeight }}
       >
+        {/* Entry marker */}
+        <div
+          className="absolute flex flex-col items-center z-20"
+          style={{
+            left: -40,
+            top: ENTRY.row * CELL_SIZE + CELL_SIZE / 2,
+            transform: 'translateY(-50%)',
+          }}
+        >
+          <span className="text-2xl">🚪</span>
+          <span className="text-xs font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded mt-0.5">ВХОД</span>
+        </div>
+
+        {/* Exit marker */}
+        <div
+          className="absolute flex flex-col items-center z-20"
+          style={{
+            right: -40,
+            top: EXIT.row * CELL_SIZE + CELL_SIZE / 2,
+            transform: 'translateY(-50%)',
+          }}
+        >
+          <span className="text-2xl">🏁</span>
+          <span className="text-xs font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded mt-0.5">ВЫХОД</span>
+        </div>
+
         {/* Maze walls SVG */}
         <svg
           className="absolute inset-0"
@@ -325,7 +433,7 @@ export default function App() {
           return (
             <div
               key={mouse.id}
-              className={`absolute text-3xl cursor-pointer transition-opacity duration-300 ${
+              className={`absolute text-3xl cursor-pointer transition-all duration-300 ${
                 mouse.caught ? 'opacity-30 scale-50' : 'hover:scale-125'
               }`}
               style={{
@@ -334,7 +442,7 @@ export default function App() {
                 transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
                 zIndex: 10,
               }}
-              onClick={() => !mouse.caught && catchMouse(mouse.id)}
+              onClick={() => !mouse.caught && !mouse.escaped && catchMouse(mouse.id)}
             >
               {mouse.caught ? '💀' : '🐭'}
             </div>
@@ -362,10 +470,16 @@ export default function App() {
           </div>
         </div>
 
-        {/* Mouse catching stats */}
-        <div className="bg-gradient-to-r from-blue-100 to-purple-100 rounded-2xl p-3 mb-3 border border-blue-200">
-          <p className="text-blue-700 font-semibold text-sm">🐭 Поймано мышей</p>
-          <p className="text-3xl font-bold text-blue-800">{caughtCount}</p>
+        {/* Stats row */}
+        <div className="flex gap-3 mb-3">
+          <div className="flex-1 bg-gradient-to-r from-blue-100 to-purple-100 rounded-2xl p-3 border border-blue-200">
+            <p className="text-blue-700 font-semibold text-xs">🐭 Поймано</p>
+            <p className="text-2xl font-bold text-blue-800">{caughtCount}</p>
+          </div>
+          <div className="flex-1 bg-gradient-to-r from-red-100 to-orange-100 rounded-2xl p-3 border border-red-200">
+            <p className="text-red-700 font-semibold text-xs">🏃 Сбежало</p>
+            <p className="text-2xl font-bold text-red-800">{escapedCount}</p>
+          </div>
         </div>
 
         {/* Meow counter */}
