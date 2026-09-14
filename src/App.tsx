@@ -169,13 +169,17 @@ function findPathToExit(grid: Cell[][], startRow: number, startCol: number): { r
 let nextMouseId = 0;
 
 function createMouse(maze: Cell[][]): Mouse {
-  const path = findPathToExit(maze, ENTRY.row, ENTRY.col);
+  // Random starting position in the maze
+  const startRow = Math.floor(Math.random() * ROWS);
+  const startCol = Math.floor(Math.random() * COLS);
+  
+  const path = findPathToExit(maze, startRow, startCol);
   return {
     id: nextMouseId++,
-    row: ENTRY.row,
-    col: ENTRY.col,
-    targetRow: path.length > 1 ? path[1].row : ENTRY.row,
-    targetCol: path.length > 1 ? path[1].col : ENTRY.col,
+    row: startRow,
+    col: startCol,
+    targetRow: path.length > 1 ? path[1].row : startRow,
+    targetCol: path.length > 1 ? path[1].col : startCol,
     progress: 0,
     speed: 0.015 + Math.random() * 0.015,
     caught: false,
