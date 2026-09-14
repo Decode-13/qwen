@@ -9,13 +9,41 @@ interface Mouse {
   caught: boolean;
 }
 
+const moods = ['😿', '🙀', '😾', '😺', '😸', '😻', '😽'];
+
+const catMessages = [
+  'Мяу! Поймала! 😼',
+  'Вкусная мышка! 😋',
+  'Я — великий охотник! 🏆',
+  'Мур-р-р, добыча! 😸',
+  'Съела бы, но лень... 😴',
+  'Легкотня! 💅',
+  'Моя добыча! 🐾',
+  'Ням-ням! 🍽️',
+  'Котик доволен! 😻',
+  'Муррр, молодец! ✨',
+  'Быстрее ветра! 💨',
+  'Мышь? Моя! 😾',
+  'Охота удалась! 🎯',
+  'Мяяяу! 🎉',
+  'Ещё хочу! 😽',
+];
+
 export default function App() {
   const [meows, setMeows] = useState(0);
   const [catMood, setCatMood] = useState('😺');
   const [mice, setMice] = useState<Mouse[]>([]);
   const [caughtCount, setCaughtCount] = useState(0);
+  const [speechBubble, setSpeechBubble] = useState<string | null>(null);
 
-  const moods = ['😿', '🙀', '😾', '😺', '😸', '😻', '😽'];
+  // Fixed paw positions (generated once)
+  const [pawPositions] = useState(() =>
+    Array.from({ length: 12 }, () => ({
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+      rotate: Math.random() * 360,
+    }))
+  );
 
   // Initialize mice
   useEffect(() => {
@@ -37,14 +65,12 @@ export default function App() {
         prevMice.map(mouse => {
           if (mouse.caught) return mouse;
 
-          // Random direction changes
           const newDirection = mouse.direction + (Math.random() - 0.5) * 30;
           const rad = (newDirection * Math.PI) / 180;
 
           let newX = mouse.x + Math.cos(rad) * mouse.speed;
           let newY = mouse.y + Math.sin(rad) * mouse.speed;
 
-          // Bounce off edges
           let finalDirection = newDirection;
           if (newX < 5 || newX > 95) {
             finalDirection = 180 - newDirection;
@@ -88,6 +114,13 @@ export default function App() {
     setCatMood('😸');
     setMeows(meows + 10);
 
+    // Show random speech bubble
+    const randomMessage = catMessages[Math.floor(Math.random() * catMessages.length)];
+    setSpeechBubble(randomMessage);
+
+    // Hide bubble after delay
+    setTimeout(() => setSpeechBubble(null), 2500);
+
     // Respawn mouse after 3 seconds
     setTimeout(() => {
       setMice(prevMice =>
@@ -107,17 +140,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-200 via-orange-100 to-yellow-100 flex items-center justify-center p-6 relative overflow-hidden">
-      {/* Floating paw prints */}
+      {/* Static paw prints */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        {[...Array(12)].map((_, i) => (
+        {pawPositions.map((paw, i) => (
           <div
             key={i}
-            className="absolute text-3xl opacity-20 animate-bounce"
+            className="absolute text-3xl opacity-20"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${i * 0.5}s`,
-              animationDuration: `${3 + Math.random() * 2}s`,
+              left: `${paw.left}%`,
+              top: `${paw.top}%`,
+              transform: `rotate(${paw.rotate}deg)`,
             }}
           >
             🐾
@@ -145,9 +177,24 @@ export default function App() {
       ))}
 
       <div className="bg-white/70 backdrop-blur-md rounded-3xl shadow-2xl p-10 max-w-md w-full text-center border-2 border-pink-200 relative z-10">
-        {/* Cat face */}
-        <div className="text-8xl mb-4 transition-all duration-300 hover:scale-110 cursor-pointer" onClick={handlePet}>
-          {catMood}
+        {/* Cat face with speech bubble */}
+        <div className="relative inline-block mb-4">
+          {/* Speech bubble */}
+          {speechBubble && (
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 animate-[fadeIn_0.3s_ease-out]">
+              <div className="bg-white rounded-2xl px-4 py-2 shadow-lg border-2 border-pink-300 relative whitespace-nowrap">
+                <p className="text-pink-700 font-semibold text-sm">{speechBubble}</p>
+                {/* Bubble tail */}
+                <div className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-4 h-4 bg-white border-r-2 border-b-2 border-pink-300 rotate-45"></div>
+              </div>
+            </div>
+          )}
+          <div
+            className="text-8xl transition-all duration-300 hover:scale-110 cursor-pointer"
+            onClick={handlePet}
+          >
+            {catMood}
+          </div>
         </div>
 
         <h1 className="text-4xl font-bold text-pink-700 mb-2">Мяу-мир 🐱</h1>
@@ -165,7 +212,9 @@ export default function App() {
         {/* Meow counter */}
         <div className="bg-gradient-to-r from-pink-100 to-orange-100 rounded-2xl p-6 mb-6 border border-pink-200">
           <p className="text-pink-600 text-sm mb-1 font-medium">Количество мяуканий</p>
-          <p className="text-5xl font-bold text-pink-700 mb-4">{meows} <span className="text-2xl">мяу!</span></p>
+          <p className="text-5xl font-bold text-pink-700 mb-4">
+            {meows} <span className="text-2xl">мяу!</span>
+          </p>
 
           <div className="flex gap-3 justify-center flex-wrap">
             <button
@@ -181,7 +230,10 @@ export default function App() {
               🤚 Погладить
             </button>
             <button
-              onClick={() => { setMeows(0); setCatMood('😺'); }}
+              onClick={() => {
+                setMeows(0);
+                setCatMood('😺');
+              }}
               className="px-5 py-2.5 bg-gray-400 hover:bg-gray-500 text-white rounded-full font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-gray-300"
             >
               💤 Усыпить
