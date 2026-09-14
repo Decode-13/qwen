@@ -194,6 +194,8 @@ export default function App() {
   const [speechBubble, setSpeechBubble] = useState<string | null>(null);
   const [maze] = useState(() => generateMaze(COLS, ROWS));
   const miceRef = useRef<Mouse[]>([]);
+  const catRef = useRef<HTMLDivElement>(null);
+  const [eyeOffset, setEyeOffset] = useState({ x: 0, y: 0 });
 
   // Fixed paw positions
   const [pawPositions] = useState(() =>
@@ -203,6 +205,33 @@ export default function App() {
       rotate: Math.random() * 360,
     }))
   );
+
+  // Track mouse cursor for cat eyes
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!catRef.current) return;
+
+      const catRect = catRef.current.getBoundingClientRect();
+      const catCenterX = catRect.left + catRect.width / 2;
+      const catCenterY = catRect.top + catRect.height / 2;
+
+      const deltaX = e.clientX - catCenterX;
+      const deltaY = e.clientY - catCenterY;
+
+      // Limit the eye movement
+      const maxOffset = 8;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const normalizedDistance = Math.min(distance / 200, 1);
+
+      const offsetX = (deltaX / distance) * maxOffset * normalizedDistance;
+      const offsetY = (deltaY / distance) * maxOffset * normalizedDistance;
+
+      setEyeOffset({ x: offsetX, y: offsetY });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   // Initialize mice
   useEffect(() => {
@@ -223,9 +252,7 @@ export default function App() {
             const nextIndex = mouse.pathIndex + 1;
 
             // Reached exit?
-            if (
-              mouse.row === EXIT.row && mouse.col === EXIT.col
-            ) {
+            if (mouse.row === EXIT.row && mouse.col === EXIT.col) {
               return { ...mouse, escaped: true, progress: 1 };
             }
 
@@ -340,7 +367,7 @@ export default function App() {
   const mazeHeight = ROWS * CELL_SIZE;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-200 via-orange-100 to-yellow-100 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-pink-200 via-orange-100 to-yellow-100 flex flex-col items-center p-4 relative overflow-hidden">
       {/* Static paw prints */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         {pawPositions.map((paw, i) => (
@@ -358,11 +385,129 @@ export default function App() {
         ))}
       </div>
 
-      {/* Title */}
-      <h1 className="text-4xl font-bold text-pink-700 mb-2 relative z-10">Мяу-мир 🐱</h1>
-      <p className="text-orange-600 mb-4 text-lg relative z-10">
-        Лови мышей в лабиринте! Они бегут к выходу 🚪
-      </p>
+      {/* Top menu bar */}
+      <div className="w-full max-w-6xl bg-white/70 backdrop-blur-md rounded-2xl shadow-xl border-2 border-pink-200 p-4 mb-4 relative z-10">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleMeow}
+              className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-full font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-pink-300 text-sm"
+            >
+              🐱 Мяукнуть
+            </button>
+            <button
+              onClick={handlePet}
+              className="px-4 py-2 bg-orange-400 hover:bg-orange-500 text-white rounded-full font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-orange-300 text-sm"
+            >
+              🤚 Погладить
+            </button>
+          </div>
+
+          {/* Center cat with eyes tracking cursor */}
+          <div className="relative flex-1 flex justify-center">
+            {speechBubble && (
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 animate-[fadeIn_0.3s_ease-out]">
+                <div className="bg-white rounded-2xl px-4 py-2 shadow-lg border-2 border-pink-300 relative whitespace-nowrap">
+                  <p className="text-pink-700 font-semibold text-sm">{speechBubble}</p>
+                  <div className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-4 h-4 bg-white border-r-2 border-b-2 border-pink-300 rotate-45"></div>
+                </div>
+              </div>
+            )}
+            <div
+              ref={catRef}
+              className="relative inline-block cursor-pointer transition-transform duration-300 hover:scale-110 select-none"
+              onClick={handlePet}
+            >
+              {/* CSS Cat face */}
+              <div className="relative w-20 h-20">
+                {/* Ears */}
+                <div className="absolute -top-3 left-1 w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-b-[18px] border-b-orange-400" />
+                <div className="absolute -top-3 right-1 w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-b-[18px] border-b-orange-400" />
+                {/* Inner ears */}
+                <div className="absolute -top-1 left-[8px] w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[10px] border-b-pink-300" />
+                <div className="absolute -top-1 right-[8px] w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[10px] border-b-pink-300" />
+
+                {/* Head */}
+                <div className="absolute inset-0 bg-orange-400 rounded-full shadow-md">
+                  {/* Cheeks */}
+                  <div className="absolute bottom-4 left-1 w-4 h-3 bg-pink-300/50 rounded-full" />
+                  <div className="absolute bottom-4 right-1 w-4 h-3 bg-pink-300/50 rounded-full" />
+
+                  {/* Eyes */}
+                  <div className="absolute top-6 left-4 w-5 h-5 bg-white rounded-full overflow-hidden border border-gray-300">
+                    <div
+                      className="absolute w-3 h-3 bg-gray-800 rounded-full transition-transform duration-100"
+                      style={{
+                        transform: `translate(${eyeOffset.x}px, ${eyeOffset.y}px)`,
+                        top: '50%',
+                        left: '50%',
+                        marginTop: '-6px',
+                        marginLeft: '-6px',
+                      }}
+                    >
+                      <div className="absolute top-0.5 left-0.5 w-1 h-1 bg-white rounded-full" />
+                    </div>
+                  </div>
+                  <div className="absolute top-6 right-4 w-5 h-5 bg-white rounded-full overflow-hidden border border-gray-300">
+                    <div
+                      className="absolute w-3 h-3 bg-gray-800 rounded-full transition-transform duration-100"
+                      style={{
+                        transform: `translate(${eyeOffset.x}px, ${eyeOffset.y}px)`,
+                        top: '50%',
+                        left: '50%',
+                        marginTop: '-6px',
+                        marginLeft: '-6px',
+                      }}
+                    >
+                      <div className="absolute top-0.5 left-0.5 w-1 h-1 bg-white rounded-full" />
+                    </div>
+                  </div>
+
+                  {/* Nose */}
+                  <div className="absolute top-[52%] left-1/2 -translate-x-1/2 w-3 h-2 bg-pink-500 rounded-full" />
+
+                  {/* Mouth */}
+                  <div className="absolute top-[62%] left-1/2 -translate-x-1/2 w-6 h-2">
+                    <div className="absolute left-0 top-0 w-3 h-2 border-b-2 border-gray-700 rounded-b-full" />
+                    <div className="absolute right-0 top-0 w-3 h-2 border-b-2 border-gray-700 rounded-b-full" />
+                  </div>
+
+                  {/* Whiskers */}
+                  <div className="absolute top-[55%] left-0 w-5 h-[1px] bg-gray-600 -rotate-6" />
+                  <div className="absolute top-[60%] left-0 w-5 h-[1px] bg-gray-600 rotate-6" />
+                  <div className="absolute top-[55%] right-0 w-5 h-[1px] bg-gray-600 rotate-6" />
+                  <div className="absolute top-[60%] right-0 w-5 h-[1px] bg-gray-600 -rotate-6" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right buttons and stats */}
+          <div className="flex items-center gap-3">
+            <div className="flex gap-2">
+              <div className="bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl px-3 py-1.5 border border-blue-200">
+                <p className="text-blue-700 font-bold text-xs">🐭 {caughtCount}</p>
+              </div>
+              <div className="bg-gradient-to-r from-red-100 to-orange-100 rounded-xl px-3 py-1.5 border border-red-200">
+                <p className="text-red-700 font-bold text-xs">🏃 {escapedCount}</p>
+              </div>
+              <div className="bg-gradient-to-r from-pink-100 to-orange-100 rounded-xl px-3 py-1.5 border border-pink-200">
+                <p className="text-pink-700 font-bold text-xs">💬 {meows}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setMeows(0);
+                setCatMood('😺');
+              }}
+              className="px-4 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded-full font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-gray-300 text-sm"
+            >
+              💤 Усыпить
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Maze container */}
       <div
@@ -448,87 +593,6 @@ export default function App() {
             </div>
           );
         })}
-      </div>
-
-      {/* Stats and controls */}
-      <div className="bg-white/70 backdrop-blur-md rounded-3xl shadow-2xl p-6 max-w-md w-full text-center border-2 border-pink-200 relative z-10 mt-4">
-        {/* Cat face with speech bubble */}
-        <div className="relative inline-block mb-3">
-          {speechBubble && (
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 animate-[fadeIn_0.3s_ease-out]">
-              <div className="bg-white rounded-2xl px-4 py-2 shadow-lg border-2 border-pink-300 relative whitespace-nowrap">
-                <p className="text-pink-700 font-semibold text-sm">{speechBubble}</p>
-                <div className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-4 h-4 bg-white border-r-2 border-b-2 border-pink-300 rotate-45"></div>
-              </div>
-            </div>
-          )}
-          <div
-            className="text-7xl transition-all duration-300 hover:scale-110 cursor-pointer"
-            onClick={handlePet}
-          >
-            {catMood}
-          </div>
-        </div>
-
-        {/* Stats row */}
-        <div className="flex gap-3 mb-3">
-          <div className="flex-1 bg-gradient-to-r from-blue-100 to-purple-100 rounded-2xl p-3 border border-blue-200">
-            <p className="text-blue-700 font-semibold text-xs">🐭 Поймано</p>
-            <p className="text-2xl font-bold text-blue-800">{caughtCount}</p>
-          </div>
-          <div className="flex-1 bg-gradient-to-r from-red-100 to-orange-100 rounded-2xl p-3 border border-red-200">
-            <p className="text-red-700 font-semibold text-xs">🏃 Сбежало</p>
-            <p className="text-2xl font-bold text-red-800">{escapedCount}</p>
-          </div>
-        </div>
-
-        {/* Meow counter */}
-        <div className="bg-gradient-to-r from-pink-100 to-orange-100 rounded-2xl p-4 mb-3 border border-pink-200">
-          <p className="text-pink-600 text-sm mb-1 font-medium">Количество мяуканий</p>
-          <p className="text-4xl font-bold text-pink-700 mb-3">
-            {meows} <span className="text-xl">мяу!</span>
-          </p>
-
-          <div className="flex gap-2 justify-center flex-wrap">
-            <button
-              onClick={handleMeow}
-              className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-full font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-pink-300 text-sm"
-            >
-              🐱 Мяукнуть
-            </button>
-            <button
-              onClick={handlePet}
-              className="px-4 py-2 bg-orange-400 hover:bg-orange-500 text-white rounded-full font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-orange-300 text-sm"
-            >
-              🤚 Погладить
-            </button>
-            <button
-              onClick={() => {
-                setMeows(0);
-                setCatMood('😺');
-              }}
-              className="px-4 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded-full font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-gray-300 text-sm"
-            >
-              💤 Усыпить
-            </button>
-          </div>
-        </div>
-
-        {/* Status */}
-        <div className="flex justify-center gap-4 text-pink-600 text-sm flex-wrap">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-pink-400 rounded-full animate-pulse"></span>
-            Мурчание: ОК
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></span>
-            Хвостик: ОК
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
-            Усы: ОК
-          </span>
-        </div>
       </div>
     </div>
   );
